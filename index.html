@@ -1,4 +1,6 @@
 <script>
+document.addEventListener("DOMContentLoaded", () => {
+
   let count = 0;
 
   let lastX = 0, lastY = 0, lastZ = 0;
@@ -15,97 +17,93 @@
   const counterEl = document.getElementById("counter");
 
   function updateCounter() {
-    if (counterEl) counterEl.textContent = count;
+    if (counterEl) {
+      counterEl.textContent = count;
+    }
   }
-
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = 10;
-  slider.max = 50;
-  slider.value = threshold;
-  slider.style.marginTop = "20px";
-
-  const label = document.createElement("div");
-  label.innerHTML = "Sensibilidad";
-  label.style.marginTop = "20px";
-
-  document.body.appendChild(label);
-  document.body.appendChild(slider);
-
-  slider.addEventListener("input", () => {
-    threshold = parseInt(slider.value);
-  });
 
   function getSmoothedDelta(delta) {
     buffer.push(delta);
     if (buffer.length > BUFFER_SIZE) buffer.shift();
 
-    let sum = buffer.reduce((a, b) => a + b, 0);
+    let sum = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      sum += buffer[i];
+    }
+
     return sum / buffer.length;
   }
 
-  function calibrate(x, y, z) {
-    lastX = x;
-    lastY = y;
-    lastZ = z;
-    calibrated = true;
-  }
-
   function handleMotion(event) {
-    const acc = event.accelerationIncludingGravity;
-    if (!acc) return;
+    try {
+      const acc = event.accelerationIncludingGravity;
+      if (!acc) return;
 
-    let x = acc.x || 0;
-    let y = acc.y || 0;
-    let z = acc.z || 0;
+      const x = acc.x || 0;
+      const y = acc.y || 0;
+      const z = acc.z || 0;
 
-    if (!calibrated) {
-      calibrate(x, y, z);
-      return;
+      if (!calibrated) {
+        lastX = x;
+        lastY = y;
+        lastZ = z;
+        calibrated = true;
+        return;
+      }
+
+      const delta =
+        Math.abs(x - lastX) +
+        Math.abs(y - lastY) +
+        Math.abs(z - lastZ);
+
+      const smoothDelta = getSmoothedDelta(delta);
+      const now = Date.now();
+
+      if (smoothDelta > threshold && (now - lastJumpTime > COOLDOWN)) {
+        count++;
+        lastJumpTime = now;
+        updateCounter();
+      }
+
+      lastX = x;
+      lastY = y;
+      lastZ = z;
+
+    } catch (e) {
+      console.log("motion error ignored");
     }
-
-    let delta =
-      Math.abs(x - lastX) +
-      Math.abs(y - lastY) +
-      Math.abs(z - lastZ);
-
-    let smoothDelta = getSmoothedDelta(delta);
-
-    const now = Date.now();
-
-    if (smoothDelta > threshold && (now - lastJumpTime > COOLDOWN)) {
-      count++;
-      lastJumpTime = now;
-      updateCounter();
-    }
-
-    lastX = x;
-    lastY = y;
-    lastZ = z;
   }
 
-  document.getElementById("start").addEventListener("click", async () => {
-    calibrated = false;
-    buffer = [];
+  const startBtn = document.getElementById("start");
+  const resetBtn = document.getElementById("reset");
 
-    if (typeof DeviceMotionEvent.requestPermission === "function") {
+  if (startBtn) {
+    startBtn.addEventListener("click", async () => {
       try {
-        const response = await DeviceMotionEvent.requestPermission();
-        if (response === "granted") {
-          window.addEventListener("devicemotion", handleMotion);
-        } else {
-          alert("Permiso denegado");
-        }
-      } catch (e) {
-        alert("Error al pedir permiso");
-      }
-    } else {
-      window.addEventListener("devicemotion", handleMotion);
-    }
-  });
+        calibrated = false;
+        buffer = [];
 
-  document.getElementById("reset").addEventListener("click", () => {
-    count = 0;
-    updateCounter();
-  });
+        if (typeof DeviceMotionEvent.requestPermission === "function") {
+          const response = await DeviceMotionEvent.requestPermission();
+          if (response !== "granted") return;
+        }
+
+        window.addEventListener("devicemotion", handleMotion);
+
+      } catch (e) {
+        console.log("start error ignored");
+      }
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      count = 0;
+      updateCounter();
+    });
+  }
+
+  updateCounter();
+
+});
 </script>
