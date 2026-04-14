@@ -1,0 +1,115 @@
+<script>
+let count = 0;
+
+let lastX = 0, lastY = 0, lastZ = 0;
+let calibrated = false;
+
+let lastJumpTime = 0;
+const COOLDOWN = 700;
+
+let buffer = [];
+const BUFFER_SIZE = 5;
+
+let threshold = 25;
+
+const counterEl = document.getElementById("counter");
+
+function updateCounter() {
+  if (counterEl) counterEl.textContent = count;
+}
+
+function safeCreateUI() {
+  try {
+    const label = document.createElement("div");
+    label.textContent = "Sensibilidad";
+    label.style.marginTop = "20px";
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = "10";
+    slider.max = "50";
+    slider.value = threshold;
+
+    slider.addEventListener("input", () => {
+      threshold = parseInt(slider.value);
+    });
+
+    document.body.appendChild(label);
+    document.body.appendChild(slider);
+  } catch (e) {
+    console.log("UI no cargada:", e);
+  }
+}
+
+function getSmoothedDelta(delta) {
+  buffer.push(delta);
+  if (buffer.length > BUFFER_SIZE) buffer.shift();
+  return buffer.reduce((a, b) => a + b, 0) / buffer.length;
+}
+
+function handleMotion(event) {
+  try {
+    const acc = event.accelerationIncludingGravity;
+    if (!acc) return;
+
+    let x = acc.x || 0;
+    let y = acc.y || 0;
+    let z = acc.z || 0;
+
+    if (!calibrated) {
+      lastX = x;
+      lastY = y;
+      lastZ = z;
+      calibrated = true;
+      return;
+    }
+
+    let delta =
+      Math.abs(x - lastX) +
+      Math.abs(y - lastY) +
+      Math.abs(z - lastZ);
+
+    let smoothDelta = getSmoothedDelta(delta);
+
+    const now = Date.now();
+
+    if (smoothDelta > threshold && (now - lastJumpTime > COOLDOWN)) {
+      count++;
+      lastJumpTime = now;
+      updateCounter();
+    }
+
+    lastX = x;
+    lastY = y;
+    lastZ = z;
+
+  } catch (e) {
+    console.log("Motion error:", e);
+  }
+}
+
+document.getElementById("start").addEventListener("click", async () => {
+  try {
+    calibrated = false;
+    buffer = [];
+
+    if (typeof DeviceMotionEvent.requestPermission === "function") {
+      const response = await DeviceMotionEvent.requestPermission();
+      if (response !== "granted") return alert("Permiso denegado");
+    }
+
+    window.addEventListener("devicemotion", handleMotion);
+
+    safeCreateUI(); // 🔥 SOLO se crea si todo va bien
+
+  } catch (e) {
+    alert("Error iniciando sensor");
+    console.log(e);
+  }
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  count = 0;
+  updateCounter();
+});
+</script>
